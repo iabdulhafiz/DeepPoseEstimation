@@ -76,7 +76,7 @@ def fixCsv(name="val"):
 
   
 
-def GenData(name="val", num=100):
+def GenData(name="val", num=100, s=1):
     path = TEMP+name+"/"
     try:
         os.mkdir(path)
@@ -87,27 +87,27 @@ def GenData(name="val", num=100):
     txt = ""
     count = 1
     
-    n1 = int(num*0.5)
-    n2 = int(num*0.25)
+    n1 = int(num)
+    n2 = 0#int(num*0.25)
     
     poseComb = np.empty((0,6), int)
     
     for i in range(n1):
-        pose = np.random.rand(6)*RANGE - RANGE/2
+        pose = s*np.random.rand(6)*RANGE - s*RANGE/2
         poseComb = np.append(poseComb, np.array([pose]), axis=0)
         move(pose)
         captureImage(path, count)
         count+=1
     
     for i in range(n2):
-        pose = 2*np.random.rand(6)*RANGE - 2*RANGE/2
+        pose = 0.5*np.random.rand(6)*RANGE - 0.5*RANGE/2
         poseComb = np.append(poseComb, np.array([pose]), axis=0)
         move(pose)
         captureImage(path, count)
         count+=1
     
     for i in range(n2):
-        pose = 0.2*np.random.rand(6)*RANGE - 0.2*RANGE/2
+        pose = 0.05*np.random.rand(6)*RANGE - 0.05*RANGE/2
         poseComb = np.append(poseComb, np.array([pose]), axis=0)
         move(pose)
         captureImage(path, count)
@@ -119,14 +119,14 @@ def GenData(name="val", num=100):
 
 
 #fixCsv("test")
-#GenData("train", 5000)
+GenData("train_2000_1", 2000, 1)
 #GenData("test", 500)
 
 #poseTxt = open("./pose.txt", "w")
 #poseTxt.close()
 
 ############################################################################
-
+'''
 import tensorflow as tf
 import keras
 from keras.models import load_model
@@ -226,7 +226,11 @@ def generateData(name="val"):
         image_arr = keras.preprocessing.image.img_to_array(image) / 255.0
         X.append(image_arr)
         
-        if count > 500:
+        if count == 500:
+            count = 5000
+        elif count == 5250:
+            count == 7500
+        elif count > 7750:
             break
     
     Yn = np.asarray(Y, dtype=np.float32) * np.array([0.5, 0.5, 0.5, 0.01, 0.01, 0.01])
@@ -249,7 +253,7 @@ testdata = tsdata.flow_from_dataframe(dataframe=testdf, directory=TEMP + "test",
 img_height,img_width = 224,224 
 #If imagenet weights are being loaded, 
 #input must have a static square shape (one of (128, 128), (160, 160), (192, 192), or (224, 224))
-base_model = applications.vgg16.VGG16(weights='imagenet',
+base_model = keras.applications.vgg16.VGG16(weights='imagenet',
                   include_top=False,
                   input_shape= (img_height,img_width,3))
 
@@ -284,17 +288,19 @@ def keras_loss(y_actual, y_predicted):
 
 model.compile(optimizer= adam, loss=keras_loss, metrics=[keras_loss])
 
-model = keras.models.load_model(TEMP + "POSE_v1.h5", custom_objects={ 'keras_loss': keras_loss })
+model = keras.models.load_model(TEMP + "POSE_v3.h5", custom_objects={ 'keras_loss': keras_loss })
 #model.fit(traindata, epochs = 1, batch_size = 64, validation_data= testdata)
 
-X, Y = generateData("train")
-model.fit(X, Y, epochs = 40, batch_size = 64)
-model.save(TEMP + "POSE_v2.h5")
+X, Y = generateData("train10k")
+model.fit(X, Y, epochs = 4, batch_size = 64)
+model.save(TEMP + "POSE_v4.h5")
 
 #savePath()
 #bpy.ops.render.render(write_still = True)
 
 
 #poseTxt.close()
+'''
+
 
 
