@@ -37,9 +37,15 @@ from keras import applications
 from keras.preprocessing.image import ImageDataGenerator 
 from keras import optimizers
 from keras.models import Sequential,Model,load_model
-from keras.layers import Dense, Dropout, Flatten, Conv2D, ConvLSTM2D, MaxPool2D,GlobalAveragePooling2D
+from keras.layers import Reshape, Input, Dense, Dropout, Flatten, Conv2D, ConvLSTM2D, MaxPool2D,GlobalAveragePooling2D
 from keras.callbacks import TensorBoard,ReduceLROnPlateau,ModelCheckpoint
 import pandas as pd
+
+
+from tensorflow.keras.optimizers import Adam
+import keras.backend as K
+
+K.set_image_data_format('channels_last')
 
 BATCH_SIZE = 32
 B = 0.1
@@ -138,6 +144,38 @@ def generateData(name="val"):
     
     return np.asarray(X), Yn
 
+def generateDataLSTM(name="val"):
+    path = TEMP+name+"/pose.csv"
+    lines = []
+    with open(path) as f:
+        lines = f.readlines()
+    
+    count = -1
+    X = []
+    Y = []
+    for line in lines:
+        count += 1
+        Y.append(line.rstrip("\n").split(","))
+        
+        L = []
+        for i in range(2):
+            loc = TEMP + name + "/" + str(count) + '.' + str(i) + ".png"
+            image = tf.keras.preprocessing.image.load_img(loc, target_size=(224, 224))
+            image_arr = keras.preprocessing.image.img_to_array(image) / 255.0
+            L.append(image_arr)
+            
+        X.append(L)
+        #if count == 500:
+        #    count = 5000
+        #elif count == 5250:
+        #    count == 7500
+        #elif count > 7750:
+        #    break
+    
+    Yn = np.asarray(Y, dtype=np.float32) * np.array([0.5, 0.5, 0.5, 0.01, 0.01, 0.01])
+    
+    return np.asarray(X), Yn
+
 """
 traindf = pd.read_csv(TEMP + "test/pose.csv", dtype=str)
 testdf = pd.read_csv(TEMP + "test/pose.csv", dtype=str)
@@ -151,58 +189,93 @@ testdata = tsdata.flow_from_dataframe(dataframe=testdf, directory=TEMP + "test",
 """
 
 
-img_height,img_width = 224,224 
-#If imagenet weights are being loaded, 
-#input must have a static square shape (one of (128, 128), (160, 160), (192, 192), or (224, 224))
-base_model = keras.applications.vgg16.VGG16(weights='imagenet',
+
+
+def get_original():
+    base_model = keras.applications.vgg16.VGG16(weights='imagenet',
                   include_top=False,
-                  input_shape= (img_height,img_width,3))
+                  input_shape= (224,224,3))
 
-"""
-x = base_model.output
-x = GlobalAveragePooling2D()(x)
-x = Dropout(0.7)(x)
-poses = Dense(6)(x)
-model = Model(inputs = base_model.input, outputs = poses)
-"""
+    for layers in (base_model.layers)[:10]:
+        print(layers)
+        layers.trainable = False
+    #x = base_model.output
+    #x = GlobalAveragePooling2D()(x)
+    #x = Dropout(0.7)(x)
+    #model = Model(inputs = base_model.input, outputs = poses)
+    #poses = Dense(6)(x)
+    X= base_model.layers[-2].output
+    X = Flatten()(X)
+    #X = Dense(512)(X)
+    predictions = Dense(6)(X)
+    model = Model(base_model.input, predictions)
+    return model
 
-for layers in (base_model.layers)[:10]:
-    print(layers)
-    layers.trainable = False
 
-LSTM = ConvLSTM2D()
 
-X= base_model.layers[-2].output
-X = Flatten()(X)
-#X = Dense(512)(X)
-predictions = Dense(6)(X)
-model = Model(base_model.input, predictions)
 
-from tensorflow.keras.optimizers import Adam
-import keras.backend as K
-# sgd = SGD(lr=lrate, momentum=0.9, decay=decay, nesterov=False)
-adam = Adam(lr=0.0001)
+
+def get_lstm():
+
+    inputs = Input((2, 224, 224, 3))
+    #lstm = ConvLSTM2D(32, (3,3), activation='relu', padding='same', return_sequences=True)(inputs)
+    lstm = ConvLSTM2D(64, (3,3), activation='relu', padding='same', return_sequences=False)(inputs)
+
+    #lstm = Conv2D(64, (3, 3))(lstm)
+    #lstm = Reshape((224, 224, 64))(lstm)
+
+    base_model = keras.applications.vgg16.VGG16(weights='imagenet',
+                  include_top=False,
+                  input_shape= (224,224,3))
+
+    for layers in (base_model.layers)[2:10]:
+        #layers.trainable = False
+        lstm = layers(lstm)
+
+    for layers in (base_model.layers)[10:19]:
+        #layers.trainable = False
+        lstm = layers(lstm)
+
+    lstm = Flatten()(lstm)
+    predictions = Dense(6)(lstm)
+    model = Model(inputs, predictions)
+
+    model.summary()
+
+    return model
+
 
 def keras_loss(y_actual, y_predicted):
     val = K.mean( K.sum( K.square( y_actual[:3] - y_predicted[:3] ) ) + B*K.sum( K.square( y_actual[3:] - y_predicted[3:] ) ) )
     return val
     
-#def keras_loss(y_true, y_pred):
-#    return K.mean( y_true - y_pred )
 
-model.compile(optimizer= adam, loss=keras_loss, metrics=[keras_loss])
-
-model = keras.models.load_model(TEMP + "POSE_v2.2.h5", custom_objects={ 'keras_loss': keras_loss })
-#model.fit(traindata, epochs = 1, batch_size = 64, validation_data= testdata)
-
-X, Y = generateData("train_2000_0.01")
-model.fit(X, Y, epochs = 30, batch_size = 64)
-model.save(TEMP + "POSE_v2.2.h5")
-
-#savePath()
-#bpy.ops.render.render(write_still = True)
+#model = keras.models.load_model(TEMP + "POSE_v2.2.h5", custom_objects={ 'keras_loss': keras_loss })
 
 
-#poseTxt.close()
+def train_original():
+    model = get_original()
+
+    adam = Adam(lr=0.0001)
+    model.compile(optimizer= adam, loss=keras_loss, metrics=[keras_loss])
+
+    X, Y = generateData("train_2000_0.01")
+    model.fit(X, Y, epochs = 30, batch_size = 64)
+    model.save(TEMP + "POSE_v2.2.h5")
 
 
+def train_lstm(ver=""):
+    model = get_lstm()
+
+    if ver != "":
+        adam = Adam(lr=0.0001)
+        model.compile(optimizer= adam, loss=keras_loss, metrics=[keras_loss])
+    else:
+        model = keras.models.load_model(TEMP + "POSE_LSTMv"+ver+".h5", custom_objects={ 'keras_loss': keras_loss })
+
+    X, Y = generateDataLSTM("trainlstm_0.01")
+    model.fit(X, Y, epochs = 30, batch_size = 16)
+    model.save(TEMP + "POSE_LSTMv"+ver+".h5")
+
+
+train_lstm()

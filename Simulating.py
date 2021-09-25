@@ -43,9 +43,9 @@ def move(pose):
     scene.camera.location.z = pose[2] + ORIGIN
     
 def CameraVelocity(vel):
-    scene.camera.rotation_euler[0] += vel[0,3] *(pi/180.0)
-    scene.camera.rotation_euler[1] += vel[0,4] *(pi/180.0)
-    scene.camera.rotation_euler[2] += vel[0,5]  *(pi/180.0)
+    scene.camera.rotation_euler[0] += vel[0,3] *(pi/180.0)*5
+    scene.camera.rotation_euler[1] += vel[0,4] *(pi/180.0)*5
+    scene.camera.rotation_euler[2] += vel[0,5]  *(pi/180.0)*5
     
     # Set camera translation
     scene.camera.location.x += vel[0,0] 
@@ -88,7 +88,6 @@ def keras_loss(y_actual, y_predicted):
     return None
 
 
-model = keras.models.load_model(TEMP + "POSE_v2.1.h5", custom_objects={ 'keras_loss': keras_loss })
 
 ###########################################################################
 
@@ -101,6 +100,9 @@ def captureImage(path=TEMP, id=0):
 
 
 def simulate(name="simulation", num=100):
+    
+    model = keras.models.load_model(TEMP + "POSE_v2.2.h5", custom_objects={ 'keras_loss': keras_loss })
+
     path = TEMP+name+"/"
     try:
         os.mkdir(path)
@@ -121,7 +123,7 @@ def simulate(name="simulation", num=100):
     move(pose)
     captureImage(path, 0)
     
-    pose = [-0.5, 0.2, 0.0, 0,0,10]
+    pose = [-0.5, 0.2, 0.0, 4,-8,20]
     #pose = [0,0,0,0,0,0]
     move(pose) 
     
@@ -142,20 +144,20 @@ def simulate(name="simulation", num=100):
         print(Y)
         
         #vel = nppose*-1*0.1
-        vel = Y*-1*0.05
+        vel = Y*-1*0.1
         
         CameraVelocity(vel)
         
         count+=1
         
-        if count > 300:
+        if count > 200:
             break
         
     np.savetxt(path + "/pose.csv", poseComb, fmt='%1.3f', delimiter=",")
     #fixCsv(name)
 
 
-simulate("sim2.1")
+#simulate("sim3.0")
 #fixCsv("test")
 #GenData("train", 5000)
 #GenData("test", 500)
@@ -165,3 +167,71 @@ simulate("sim2.1")
 
 ############################################################################
 
+
+def simulateLSTM(name="simulation", num=100):
+    model = keras.models.load_model(TEMP + "POSE_LSTMv.h5", custom_objects={ 'keras_loss': keras_loss })
+
+    
+    path = TEMP+name+"/"
+    try:
+        os.mkdir(path)
+    except OSError as error:
+        pass
+    
+    
+    count = 1
+    
+    n1 = int(num*0.5)
+    n2 = int(num*0.25)
+    
+    poseComb = np.empty((0,6), int)
+    
+    error = lambda p : math.sqrt(p[0]**2 + p[1]**2 + p[2]**2)
+    
+    pose = [0,0,0,0,0,0]
+    move(pose)
+    captureImage(path, 0)
+    
+    pose = [0.5, 0.2, 0.0, 4,0,5]
+    #pose = [0,0,0,0,0,0]
+    move(pose) 
+    
+    
+    while True:#error(pose) > 0.1:
+        #pose = np.random.rand(6)*RANGE - RANGE/2
+        pose = getCamPose()
+        nppose = np.array([pose])
+        poseComb = np.append(poseComb, nppose, axis=0)
+        
+        captureImage(path, count)
+        #time.sleep(0.03)
+        
+        loc = path + str(count) + ".png"
+        image1 = tf.keras.preprocessing.image.load_img(loc, target_size=(224, 224))
+        image1 = keras.preprocessing.image.img_to_array(image1) / 255.0
+        
+        image2 = image1
+        if count != 1:
+            loc = path + str(count-1) + ".png"
+            image2 = tf.keras.preprocessing.image.load_img(loc, target_size=(224, 224))
+            image2 = keras.preprocessing.image.img_to_array(image2) / 255.0
+
+        
+        Y = model.predict(np.array([[image1, image2]]))
+        print(Y)
+        
+        #vel = nppose*-1*0.1
+        vel = Y*-1*0.1
+        
+        CameraVelocity(vel)
+        
+        count+=1
+        
+        if count > 200:
+            break
+        
+    np.savetxt(path + "/pose.csv", poseComb, fmt='%1.3f', delimiter=",")
+    #fixCsv(name)
+    
+    
+simulateLSTM("simlstm")

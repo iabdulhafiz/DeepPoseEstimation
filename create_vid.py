@@ -8,7 +8,7 @@ if len(sys.argv) == 2:
     folder = os.path.join(os.getcwd(),sys.argv[1])
     print(folder)
     #length = len([name for name in os.listdir(folder) if os.path.isfile(name)])
-    length = 300
+    length = 200
     
     orig = cv2.imread(folder + "0.png")
     height, width, layers = orig.shape

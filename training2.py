@@ -117,9 +117,36 @@ def GenData(name="val", num=100, s=1):
     #fixCsv(name)
 
 
+def GenDataLSTM(name="val", num=100, s=1):
+    path = TEMP+name+"/"
+    try:
+        os.mkdir(path)
+    except OSError as error:
+        pass
+    
+    file = open(path + "/pose.csv", "w")
+    txt = ""
+    count = 1
+    
+    poseComb = np.empty((0,6), int)
+    
+    for i in range(num):
+        pose = s*np.random.rand(6)*RANGE - s*RANGE/2
+        randVel = 1*s*(np.random.rand(6)*RANGE - RANGE/2)
+        poseComb = np.append(poseComb, np.array([pose]), axis=0)
+        
+        for j in range(2):
+            move(pose + j*randVel)
+            captureImage(path, str(i)+'.'+str(j))
+        
+        
+    np.savetxt(path + "/pose.csv", poseComb, fmt='%1.3f', delimiter=",")
+    #fixCsv(name)
+
 
 #fixCsv("test")
-GenData("train_2000_1", 2000, 1)
+GenDataLSTM("trainlstm_0.01", 1000, 0.01)
+#GenData("train_2000_0.01", 2000, 0.01)
 #GenData("test", 500)
 
 #poseTxt = open("./pose.txt", "w")
